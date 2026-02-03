@@ -1,0 +1,1362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>H&L Package Builder</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+:root {
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --success: #16a34a;
+  --danger: #dc2626;
+  --warning: #f59e0b;
+  --bg: #f1f5f9;
+  --card: #ffffff;
+  --border: #e2e8f0;
+  --text: #1e293b;
+  --text-light: #64748b;
+  --radius: 8px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; }
+
+/* Header */
+.header { background: var(--primary); color: white; padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; }
+.header h1 { font-size: 18px; font-weight: 600; }
+.header-actions { display: flex; gap: 8px; }
+
+/* Layout */
+.app { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr auto; height: calc(100vh - 48px); gap: 0; }
+.panel { background: var(--card); border: 1px solid var(--border); overflow: hidden; display: flex; flex-direction: column; }
+.panel-header { padding: 12px 16px; border-bottom: 1px solid var(--border); background: #f8fafc; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.panel-header h2 { font-size: 14px; font-weight: 600; }
+.panel-body { padding: 16px; overflow-y: auto; flex: 1; }
+.panel-left { grid-row: 1 / 3; }
+.panel-right { grid-row: 1 / 3; }
+.panel-bottom { grid-column: 1 / 3; max-height: 45vh; }
+
+/* Buttons */
+.btn { padding: 6px 14px; border-radius: var(--radius); border: 1px solid var(--border); background: white; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+.btn:hover { background: #f8fafc; }
+.btn-primary { background: var(--primary); color: white; border-color: var(--primary); }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-success { background: var(--success); color: white; border-color: var(--success); }
+.btn-success:hover { opacity: 0.9; }
+.btn-danger { background: var(--danger); color: white; border-color: var(--danger); }
+.btn-danger:hover { opacity: 0.9; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-xs { padding: 2px 8px; font-size: 11px; }
+
+/* Drop zone */
+.drop-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 24px; text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 12px; }
+.drop-zone:hover, .drop-zone.dragover { border-color: var(--primary); background: #eff6ff; }
+.drop-zone input { display: none; }
+.drop-zone p { color: var(--text-light); font-size: 13px; }
+.drop-zone p strong { color: var(--text); }
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th { background: #f8fafc; font-weight: 600; font-size: 12px; text-transform: uppercase; color: var(--text-light); position: sticky; top: 0; z-index: 1; }
+tr:hover { background: #f8fafc; }
+tr.selected { background: #eff6ff; }
+td.price { text-align: right; font-weight: 500; }
+td.actions { text-align: center; }
+
+/* Filters */
+.filters { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+.filter-group { display: flex; align-items: center; gap: 4px; }
+.filter-group label { font-size: 12px; font-weight: 500; color: var(--text-light); }
+.filter-group input, .filter-group select { padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; }
+.filter-group input[type="number"] { width: 100px; }
+.filter-group select { max-width: 160px; }
+
+/* Package builder form */
+.builder-section { margin-bottom: 16px; padding: 12px; background: #f8fafc; border-radius: var(--radius); border: 1px solid var(--border); }
+.builder-section h3 { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text-light); }
+.builder-row { display: flex; gap: 12px; margin-bottom: 8px; align-items: center; }
+.builder-row label { font-size: 12px; font-weight: 500; min-width: 80px; color: var(--text-light); }
+.builder-row select, .builder-row input { flex: 1; padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; }
+.builder-row .value { font-weight: 600; font-size: 14px; }
+
+/* Totals display */
+.totals-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.total-card { padding: 10px; border-radius: var(--radius); text-align: center; }
+.total-card.essence { background: #dcfce7; border: 1px solid #bbf7d0; }
+.total-card.aspire { background: #fef3c7; border: 1px solid #fde68a; }
+.total-card .label { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-light); }
+.total-card .amount { font-size: 20px; font-weight: 700; margin-top: 2px; }
+
+/* Email output */
+.email-preview { padding: 16px; background: white; border: 1px solid var(--border); border-radius: var(--radius); margin-top: 12px; overflow-x: auto; }
+.email-preview table { font-family: Calibri, Arial, sans-serif; font-size: 12px; }
+.email-preview th { background: #d9e2f3; color: #1f3864; padding: 8px 10px; font-size: 11px; }
+.email-preview td { padding: 6px 10px; border: 1px solid #d6dce4; }
+.email-preview .essence-col { background: #e2efda; }
+.email-preview .aspire-col { background: #fce4d6; }
+
+/* Badges */
+.badge { padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.badge-blue { background: #dbeafe; color: #1d4ed8; }
+.badge-green { background: #dcfce7; color: #16a34a; }
+
+/* Empty states */
+.empty-state { text-align: center; padding: 40px 20px; color: var(--text-light); }
+.empty-state p { margin-top: 8px; font-size: 13px; }
+
+/* Toast */
+.toast { position: fixed; bottom: 20px; right: 20px; padding: 12px 20px; background: #1e293b; color: white; border-radius: var(--radius); font-size: 13px; z-index: 1000; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+.toast.show { opacity: 1; }
+
+/* Selected lot info */
+.selected-lot-info { padding: 10px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--radius); margin-bottom: 12px; font-size: 13px; }
+.selected-lot-info strong { color: var(--primary); }
+
+/* Shortlist table styling */
+.shortlist-group { margin-bottom: 8px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.shortlist-group-header { padding: 8px 12px; background: #f1f5f9; font-weight: 600; font-size: 13px; display: flex; justify-content: space-between; align-items: center; }
+.shortlist-designs { padding: 4px 12px; }
+.shortlist-design-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+.shortlist-design-row:last-child { border-bottom: none; }
+
+/* Tabs */
+.tabs { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 12px; }
+.tab { padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text-light); border-bottom: 2px solid transparent; margin-bottom: -2px; }
+.tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+/* Parsing modal */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: none; align-items: center; justify-content: center; }
+.modal-overlay.show { display: flex; }
+.modal { background: white; border-radius: 12px; padding: 24px; max-width: 800px; width: 90%; max-height: 80vh; overflow-y: auto; }
+.modal h2 { margin-bottom: 16px; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+/* Editable cell */
+td[contenteditable] { cursor: text; }
+td[contenteditable]:focus { outline: 2px solid var(--primary); outline-offset: -2px; background: #eff6ff; }
+
+.lot-row { cursor: pointer; }
+.lot-row:hover { background: #eff6ff !important; }
+
+/* Email header textarea */
+.email-header-input { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; font-family: inherit; resize: vertical; min-height: 60px; margin-bottom: 8px; }
+
+/* Responsive tweaks */
+@media (max-width: 1200px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: auto auto auto; }
+  .panel-left, .panel-right { grid-row: auto; }
+  .panel-bottom { grid-column: 1; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>H&L Package Builder — Easystart Homes</h1>
+  <div class="header-actions">
+    <button class="btn btn-sm" onclick="showUpdateHomePrices()" title="Update Easystart home design prices from PDF">Update Home Prices</button>
+  </div>
+</div>
+
+<div class="app">
+  <!-- LEFT PANEL: Land Lots -->
+  <div class="panel panel-left">
+    <div class="panel-header">
+      <h2>Land Lots</h2>
+      <span id="lotCount" class="badge badge-blue">0 lots</span>
+    </div>
+    <div class="panel-body">
+      <div class="drop-zone" id="dropZone">
+        <input type="file" id="pdfInput" accept=".pdf" multiple>
+        <p><strong>Drop land pricelist PDFs here</strong><br>or click to browse</p>
+      </div>
+
+      <div class="filters">
+        <div class="filter-group">
+          <label>Budget:</label>
+          <input type="number" id="filterBudget" placeholder="Max total $" step="5000">
+        </div>
+        <div class="filter-group">
+          <label>Estate:</label>
+          <select id="filterEstate"><option value="">All</option></select>
+        </div>
+        <div class="filter-group">
+          <label>Frontage:</label>
+          <select id="filterFrontage">
+            <option value="">All</option>
+            <option value="7.5">7.5m</option>
+            <option value="10">10m</option>
+            <option value="10.5">10.5m</option>
+            <option value="12.5">12.5m</option>
+            <option value="15">15m+</option>
+          </select>
+        </div>
+        <button class="btn btn-xs" onclick="clearAllLots()">Clear All</button>
+      </div>
+
+      <div style="overflow-x:auto;">
+        <table id="lotsTable">
+          <thead>
+            <tr>
+              <th>Estate</th>
+              <th>Lot</th>
+              <th>Size (m²)</th>
+              <th>Front (m)</th>
+              <th>Price</th>
+              <th>Titles</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="lotsBody">
+            <tr><td colspan="7"><div class="empty-state"><p>Upload a land pricelist PDF to get started</p></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL: Package Builder -->
+  <div class="panel panel-right">
+    <div class="panel-header">
+      <h2>Package Builder</h2>
+    </div>
+    <div class="panel-body">
+      <div id="builderEmpty" class="empty-state">
+        <p>Select a lot from the left panel to start building a package</p>
+      </div>
+
+      <div id="builderForm" style="display:none;">
+        <div class="selected-lot-info" id="selectedLotInfo"></div>
+
+        <div class="builder-section">
+          <h3>Home Design</h3>
+          <div class="builder-row">
+            <label>Design:</label>
+            <select id="designSelect">
+              <option value="">— Select a home design —</option>
+            </select>
+          </div>
+          <div id="designInfo" style="display:none; margin-top:8px; font-size:12px; color:var(--text-light);">
+            <span id="designNotes"></span>
+          </div>
+        </div>
+
+        <div class="builder-section">
+          <h3>Siteworks</h3>
+          <div class="builder-row">
+            <label>Amount:</label>
+            <select id="siteworksSelect">
+              <option value="17650">$17,650</option>
+              <option value="26950">$26,950</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="builder-section">
+          <h3>Package Totals</h3>
+          <div style="font-size:13px; margin-bottom:8px;">
+            <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>Land:</span><span id="totalLand">—</span></div>
+            <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>Home (Essence):</span><span id="totalHomeEssence">—</span></div>
+            <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>Home (Aspire):</span><span id="totalHomeAspire">—</span></div>
+            <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>Siteworks:</span><span id="totalSiteworks">—</span></div>
+          </div>
+          <div class="totals-grid">
+            <div class="total-card essence">
+              <div class="label">Essence Range</div>
+              <div class="amount" id="grandTotalEssence">—</div>
+            </div>
+            <div class="total-card aspire">
+              <div class="label">Aspire Range</div>
+              <div class="amount" id="grandTotalAspire">—</div>
+            </div>
+          </div>
+        </div>
+
+        <button class="btn btn-primary" style="width:100%;" onclick="addToShortlist()" id="addShortlistBtn" disabled>
+          Add to Shortlist
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM PANEL: Shortlist & Email Output -->
+  <div class="panel panel-bottom">
+    <div class="panel-header">
+      <h2>Shortlist & Email Output</h2>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span id="shortlistCount" class="badge badge-green">0 packages</span>
+        <button class="btn btn-sm btn-success" onclick="copyToClipboard()">Copy to Clipboard</button>
+        <button class="btn btn-sm btn-danger" onclick="clearShortlist()">Clear</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('shortlist', this)">Shortlist</div>
+        <div class="tab" onclick="switchTab('preview', this)">Email Preview</div>
+      </div>
+
+      <div id="tabShortlist">
+        <div id="shortlistEmpty" class="empty-state"><p>Add packages from the builder to see them here</p></div>
+        <div id="shortlistContent" style="display:none;"></div>
+      </div>
+
+      <div id="tabPreview" style="display:none;">
+        <div style="margin-bottom:8px;">
+          <label style="font-size:12px;font-weight:500;color:var(--text-light);">Email header text (optional):</label>
+          <textarea class="email-header-input" id="emailHeader" placeholder="As discussed, I've put together some rough total house & land package pricing..."></textarea>
+        </div>
+        <div class="email-preview" id="emailPreview">
+          <div class="empty-state"><p>Add packages to shortlist first</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Parsing review modal -->
+<div class="modal-overlay" id="parseModal">
+  <div class="modal">
+    <h2>Review Parsed Lots</h2>
+    <p style="font-size:13px;color:var(--text-light);margin-bottom:12px;">Verify the parsed data below. Click any cell to edit. Set the estate name if not auto-detected.</p>
+    <div class="builder-row" style="margin-bottom:12px;">
+      <label>Estate Name:</label>
+      <input type="text" id="parseEstateName" placeholder="e.g. The Avenue, Brabham">
+    </div>
+    <div style="overflow-x:auto;">
+      <table id="parseTable">
+        <thead>
+          <tr><th>Lot</th><th>Size (m²)</th><th>Frontage (m)</th><th>Price ($)</th><th>Title Date</th><th></th></tr>
+        </thead>
+        <tbody id="parseBody"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeParseModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmParsedLots()">Import Lots</button>
+    </div>
+  </div>
+</div>
+
+<!-- Update home prices modal -->
+<div class="modal-overlay" id="homePriceModal">
+  <div class="modal">
+    <h2>Update Easystart Home Prices</h2>
+    <p style="font-size:13px;color:var(--text-light);margin-bottom:12px;">Upload the latest Easystart price list PDF to update home design prices.</p>
+    <div class="drop-zone" id="homeDropZone">
+      <input type="file" id="homePdfInput" accept=".pdf">
+      <p><strong>Drop Easystart PDF here</strong><br>or click to browse</p>
+    </div>
+    <div id="homePriceStatus" style="font-size:13px;margin-top:8px;"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeHomePriceModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast notification -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// EASYSTART HOME DESIGNS DATA
+// ============================================================
+const EASYSTART_DESIGNS = [
+  // Easy Range - Rear — 6m
+  { name: "Hobart", category: "Rear", frontage: 6, essence: 301200, aspire: 316400, beds: 3, baths: 2, notes: "3x2", area: 90.13, length: 27.61, width: 5.89 },
+  { name: "Porto", category: "Rear", frontage: 6, essence: 307800, aspire: 323500, beds: 3, baths: 2, notes: "3x2", area: 94.72, length: 26.99, width: 5.89 },
+  // Easy Range - Rear — 7.5m
+  { name: "Zurich", category: "Rear", frontage: 7.5, essence: 313300, aspire: 328500, beds: 3, baths: 2, notes: "3x2", area: 99.64, length: 25.79, width: 7.39 },
+  { name: "Montego", category: "Rear", frontage: 7.5, essence: 318200, aspire: 335100, beds: 3, baths: 2, notes: "3x2", area: 100.49, length: 25.69, width: 7.39 },
+  // Easy Range - Rear — 10m
+  { name: "Positano", category: "Rear", frontage: 10, essence: 358800, aspire: 374800, beds: 3, baths: 2, notes: "3x2 + Theatre", area: 142.81, length: 26.09, width: 8.87 },
+  // Easy Range - Rear — 10.5m
+  { name: "Elma", category: "Rear", frontage: 10, essence: 322100, aspire: 338300, beds: 3, baths: 2, notes: "3x2", area: 99.81, length: 26.80, width: 8.49 },
+  // Easy Range - Side — 12.5m
+  { name: "Calgary", category: "Side", frontage: 12.5, essence: 308900, aspire: 324600, beds: 3, baths: 2, notes: "3x2", area: 103.42, length: 17.39, width: 9.99 },
+  { name: "Samoa", category: "Side", frontage: 12.5, essence: 347900, aspire: 364700, beds: 4, baths: 2, notes: "4x2 + Theatre", area: 137.59, length: 21.11, width: 9.61 },
+  // Easy Range - Side — 15m
+  { name: "Hamburg", category: "Side", frontage: 12.5, essence: 346500, aspire: 363600, beds: 4, baths: 2, notes: "4x2 + Theatre", area: 141.65, length: 19.29, width: 11.99 },
+  // Easy Range - Front — 7.5m
+  { name: "Appolo", category: "Front", frontage: 7.5, essence: 348100, aspire: 364700, beds: 3, baths: 2, notes: "3x2", area: 111.45, length: 20.99, width: 7.49 },
+  { name: "Myra", category: "Front", frontage: 7.5, essence: 317600, aspire: 334000, beds: 3, baths: 2, notes: "3x2", area: 93.21, length: 20.65, width: 7.39 },
+  // Easy Range - Front — 10m
+  { name: "Cali", category: "Front", frontage: 10, essence: 304000, aspire: 319800, beds: 3, baths: 2, notes: "3x2", area: 99.15, length: 18.25, width: 9.89 },
+  { name: "Osaka", category: "Front", frontage: 10, essence: 315200, aspire: 330900, beds: 3, baths: 2, notes: "3x2 + Theatre", area: 110.14, length: 19.55, width: 9.89 },
+  // Easy Range - Front — 10.5m
+  { name: "Gisborne", category: "Front", frontage: 10.5, essence: 286500, aspire: 302100, beds: 3, baths: 2, notes: "3x2", area: 91.62, length: 15.05, width: 10.39 },
+  { name: "Brussels", category: "Front", frontage: 10.5, essence: 294400, aspire: 310300, beds: 3, baths: 2, notes: "3x2", area: 91.59, length: 14.99, width: 10.39 },
+  { name: "Kingston", category: "Front", frontage: 10.5, essence: 311500, aspire: 327300, beds: 3, baths: 2, notes: "3x2", area: 103.42, length: 17.09, width: 10.39 },
+  { name: "Maine", category: "Front", frontage: 10.5, essence: 311400, aspire: 327200, beds: 3, baths: 2, notes: "3x2", area: 102.50, length: 18.45, width: 10.39 },
+  { name: "Kyoto", category: "Front", frontage: 10.5, essence: 319700, aspire: 337300, beds: 4, baths: 2, notes: "4x2", area: 110.20, length: 20.05, width: 10.39 },
+  { name: "Imola", category: "Front", frontage: 10.5, essence: 319500, aspire: 335200, beds: 4, baths: 2, notes: "4x2", area: 108.75, length: 17.79, width: 10.39 },
+  { name: "Arno", category: "Front", frontage: 10.5, essence: 335300, aspire: 352200, beds: 3, baths: 2, notes: "3x2", area: 118.94, length: 21.15, width: 10.39 },
+  { name: "Verona", category: "Front", frontage: 10.5, essence: 338500, aspire: 354200, beds: 3, baths: 2, notes: "3x2 + Theatre, Larder", area: 116.63, length: 19.45, width: 10.39 },
+  { name: "Florence", category: "Front", frontage: 10.5, essence: 370700, aspire: 387200, beds: 4, baths: 2, notes: "4x2 + Theatre", area: 143.03, length: 22.99, width: 10.39 },
+  // Easy Range - Front — 12.5m
+  { name: "St Clair", category: "Front", frontage: 12.5, essence: 286500, aspire: 307900, beds: 2, baths: 2, notes: "2x2", area: 83.88, length: 12.69, width: 10.89 },
+  { name: "Fitzroy", category: "Front", frontage: 12.5, essence: 293400, aspire: 309100, beds: 3, baths: 2, notes: "3x2", area: 139.93, length: 14.95, width: 11.39 },
+  { name: "Durban", category: "Front", frontage: 12.5, essence: 304900, aspire: 322100, beds: 3, baths: 2, notes: "3x2", area: 102.69, length: 15.85, width: 11.39 },
+  { name: "Brunswick", category: "Front", frontage: 12.5, essence: 308700, aspire: 325700, beds: 3, baths: 2, notes: "3x2, Larder", area: 105.47, length: 14.89, width: 11.39 },
+  { name: "Canterbury", category: "Front", frontage: 12.5, essence: 309300, aspire: 325600, beds: 3, baths: 2, notes: "3x2", area: 103.94, length: 15.11, width: 11.39 },
+  { name: "Ambrose", category: "Front", frontage: 12.5, essence: 316000, aspire: 332700, beds: 3, baths: 2, notes: "3x2", area: 111.13, length: 16.61, width: 11.03 },
+  { name: "Aspen", category: "Front", frontage: 12.5, essence: 313500, aspire: 333200, beds: 4, baths: 2, notes: "4x2", area: 114.13, length: 15.39, width: 11.39 },
+  { name: "Solina", category: "Front", frontage: 12.5, essence: 316700, aspire: 332500, beds: 3, baths: 2, notes: "3x2", area: 119.33, length: 16.79, width: 11.47 },
+  { name: "Alberta", category: "Front", frontage: 12.5, essence: 329700, aspire: 344800, beds: 3, baths: 2, notes: "3x2 + Theatre", area: 122.83, length: 20.95, width: 10.59 },
+  { name: "Torino", category: "Front", frontage: 12.5, essence: 363400, aspire: 378700, beds: 4, baths: 2, notes: "4x2 + Theatre + Scullery", area: 143.27, length: 21.00, width: 10.90 },
+  { name: "Jersey", category: "Front", frontage: 12.5, essence: 359600, aspire: 375700, beds: 4, baths: 2, notes: "4x2 + Theatre", area: 138.48, length: 20.57, width: 11.03 },
+  { name: "Maui", category: "Front", frontage: 12.5, essence: 371400, aspire: 388700, beds: 4, baths: 2, notes: "4x2 + Theatre", area: 147.13, length: 21.59, width: 11.39 },
+  { name: "Marseille", category: "Front", frontage: 12.5, essence: 376800, aspire: 397100, beds: 4, baths: 2, notes: "4x2 + Theatre + Scullery", area: 153.66, length: 22.29, width: 10.89 },
+  { name: "Montreal", category: "Front", frontage: 12.5, essence: 375800, aspire: 392500, beds: 4, baths: 2, notes: "4x2 + Theatre, Games", area: 159.36, length: 23.71, width: 11.01 },
+  { name: "Arbor", category: "Front", frontage: 12.5, essence: 393400, aspire: 409900, beds: 4, baths: 2, notes: "4x2 + Theatre", area: 173.54, length: 24.19, width: 11.19 },
+  { name: "Indi", category: "Front", frontage: 12.5, essence: 419000, aspire: 441600, beds: 4, baths: 2, notes: "4x2 + Theatre, Scullery", area: 182.87, length: 25.69, width: 11.39 },
+  // Easy Range - Front — 15m
+  { name: "Paris", category: "Front", frontage: 15, essence: 351900, aspire: 367600, beds: 4, baths: 2, notes: "4x2 + Theatre", area: 138.54, length: 15.49, width: 13.89 },
+  { name: "Everly", category: "Front", frontage: 15, essence: 381500, aspire: 398600, beds: 4, baths: 2, notes: "4x2 + Theatre", area: 152.59, length: 16.79, width: 13.69 },
+  { name: "Dallas", category: "Front", frontage: 15, essence: 374900, aspire: 390300, beds: 4, baths: 2, notes: "4x2 + Theatre", area: 163.80, length: 19.39, width: 12.19 },
+  { name: "San Francisco", category: "Front", frontage: 15, essence: 381200, aspire: 398400, beds: 4, baths: 2, notes: "4x2 + Theatre", area: 164.58, length: 18.41, width: 12.99 },
+  { name: "Sydney", category: "Front", frontage: 15, essence: 378500, aspire: 393500, beds: 4, baths: 2, notes: "4x2 + Theatre", area: 166.13, length: 19.39, width: 12.49 },
+  { name: "Lennox", category: "Front", frontage: 15, essence: 381200, aspire: 404000, beds: 4, baths: 2, notes: "4x2, Theatre", area: 167.52, length: 19.39, width: 12.99 },
+  { name: "Los Angeles", category: "Front", frontage: 15, essence: 390700, aspire: 405700, beds: 4, baths: 2, notes: "4x2 + Theatre", area: 172.22, length: 21.15, width: 12.99 },
+  { name: "Fairwood", category: "Front", frontage: 15, essence: 415700, aspire: 437900, beds: 5, baths: 2, notes: "5x2 + Theatre, Games, Scullery", area: 203.75, length: 23.00, width: 12.09 },
+  { name: "Valley", category: "Front", frontage: 15, essence: 426200, aspire: 444500, beds: 4, baths: 2, notes: "4x2 + Theatre, Games", area: 199.05, length: 22.99, width: 12.09 },
+  { name: "Hudson", category: "Front", frontage: 15, essence: 429600, aspire: 448700, beds: 4, baths: 2, notes: "4x2 + Games, Theatre, Study", area: 211.66, length: 23.39, width: 13.29 },
+  // Easy Range - Front — 15m Squat
+  { name: "Sedona", category: "Front", frontage: 15, essence: 330800, aspire: 350700, beds: 4, baths: 2, notes: "4x2", area: 120.80, length: 14.85, width: 12.49 },
+  { name: "Delaware", category: "Front", frontage: 15, essence: 332300, aspire: 350100, beds: 4, baths: 2, notes: "4x2", area: 125.34, length: 15.99, width: 12.39 },
+  { name: "Ottawa", category: "Front", frontage: 15, essence: 335200, aspire: 352900, beds: 3, baths: 2, notes: "3x2", area: 128.55, length: 16.09, width: 13.29 },
+  { name: "Boston", category: "Front", frontage: 15, essence: 349800, aspire: 365800, beds: 4, baths: 2, notes: "4x2 + Theatre", area: 136.41, length: 16.39, width: 13.89 },
+];
+
+// ============================================================
+// APP STATE
+// ============================================================
+let lots = [];
+let selectedLotId = null;
+let shortlist = []; // { lotId, lot, designs: [{ design, siteworks, essenceTotal, aspireTotal }] }
+let parsedLots = [];
+let nextLotId = 1;
+
+// ============================================================
+// PDF PARSING
+// ============================================================
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+async function parseLandPDF(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let allItems = [];
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const items = content.items.map(item => ({
+      text: item.str.trim(),
+      x: Math.round(item.transform[4]),
+      y: Math.round(item.transform[5]),
+    })).filter(item => item.text.length > 0);
+    allItems.push(...items);
+  }
+
+  // Sort all items top-to-bottom (descending y), then left-to-right
+  allItems.sort((a, b) => b.y - a.y || a.x - b.x);
+
+  // Group items into rows: items within 5px of each other vertically
+  const rawRows = [];
+  let currentRow = [];
+  let currentY = null;
+  allItems.forEach(item => {
+    if (currentY === null || Math.abs(item.y - currentY) <= 5) {
+      currentRow.push(item);
+      if (currentY === null) currentY = item.y;
+    } else {
+      if (currentRow.length > 0) rawRows.push(currentRow.sort((a, b) => a.x - b.x));
+      currentRow = [item];
+      currentY = item.y;
+    }
+  });
+  if (currentRow.length > 0) rawRows.push(currentRow.sort((a, b) => a.x - b.x));
+
+  return extractLotData(rawRows, file.name);
+}
+
+function extractLotData(rows, filename) {
+  let estateName = '';
+  let columnPositions = {}; // { lot: x, size: x, front: x, price: x, titles: x }
+  const results = [];
+  let headerRowIdx = -1;
+
+  // Detect estate name from all text in the PDF
+  const allText = rows.map(r => r.map(c => c.text).join(' ')).join(' ').toLowerCase();
+  const estateKeywords = {
+    'theavenue': 'The Avenue', 'avenue estate': 'The Avenue',
+    'brabhamestate': 'Brabham', 'brabham': 'Brabham',
+    'lakelands': 'Lakelands', 'lakelandsestate': 'Lakelands',
+    'baldivis parks': 'Baldivis Parks', 'baldivis': 'Baldivis',
+    'woodlands': 'Woodlands', 'glades': 'Glades',
+    'sienna wood': 'Sienna Wood', 'sienna': 'Sienna Wood',
+    'golden bay': 'Golden Bay', 'wellard': 'Wellard',
+    'treeby': 'Treeby', 'mandogalup': 'Mandogalup',
+    'caversham': 'Caversham', 'ellenbrook': 'Ellenbrook',
+    'whiteman': 'Whiteman Edge', 'harrisdale': 'Harrisdale',
+    'piara': 'Piara Waters', 'byford': 'Byford',
+    'hilbert': 'Hilbert', 'haynes': 'Haynes',
+    'newhaven': 'Newhaven', 'shorehaven': 'Shorehaven',
+    'banksia grove': 'Banksia Grove', 'wandi': 'Wandi',
+  };
+  // Check longer keywords first for better matching
+  const sortedKeywords = Object.entries(estateKeywords).sort((a, b) => b[0].length - a[0].length);
+  for (const [keyword, name] of sortedKeywords) {
+    if (allText.includes(keyword)) { estateName = name; break; }
+  }
+
+  // Find header row — scan for rows containing "LOT" alongside SIZE/AREA/PRICE/FRONT keywords
+  // Also collect header info from adjacent rows (headers can span 2-3 y-rows)
+  for (let i = 0; i < rows.length; i++) {
+    const rowTexts = rows[i].map(c => c.text.toLowerCase());
+
+    const hasLot = rowTexts.some(t => /^lot/.test(t));
+    if (!hasLot) continue;
+
+    // Gather all cells from this row and 2 rows above and below for multi-row headers
+    const headerCells = [];
+    for (let j = Math.max(0, i - 2); j <= Math.min(rows.length - 1, i + 2); j++) {
+      headerCells.push(...rows[j]);
+    }
+    const allHeaderText = headerCells.map(c => c.text.toLowerCase());
+
+    const hasSize = allHeaderText.some(t => /size|area|\bsqm\b|\(sqm/.test(t));
+    const hasPrice = allHeaderText.some(t => /price/.test(t));
+    const hasFront = allHeaderText.some(t => /front|dimension/.test(t));
+
+    if (hasSize || hasPrice || hasFront) {
+      headerRowIdx = i;
+
+      // Map column positions from ALL header cells
+      // Priority: use the most specific match
+      headerCells.forEach(cell => {
+        const t = cell.text.toLowerCase().trim();
+
+        // LOT column: "LOT #", "LOT" but NOT "LOT SIZE"
+        if (/^lot\s*(#|number)?$/i.test(t)) columnPositions.lot = cell.x;
+        // SIZE column: "SIZE", "AREA", "(sqm)", "LOT SIZE"
+        if (/^(size|area|\(sqm|lot\s*size)/i.test(t)) columnPositions.size = cell.x;
+        // FRONT column: "FRONT", "DIMENSIONS"
+        if (/^(front|dimension)/i.test(t)) columnPositions.front = cell.x;
+        // PRICE column: "PRICE", "LAND PRICE" — but also "LAND" by itself if near a "PRICE"
+        if (/price/i.test(t)) columnPositions.price = cell.x;
+        if (/^land$/i.test(t) && !columnPositions.price) columnPositions.price = cell.x;
+        // TITLES column: "TITLE", "TITLES"
+        if (/^title/i.test(t)) columnPositions.titles = cell.x;
+      });
+
+      break;
+    }
+  }
+
+  if (headerRowIdx === -1) return { estateName: estateName || filenameToEstate(filename), lots: [] };
+
+  console.log('Header at row', headerRowIdx, 'Columns:', JSON.stringify(columnPositions));
+
+  // Find the y-range of the header so we skip it
+  const headerMinY = Math.min(...rows[headerRowIdx].map(c => c.y));
+
+  // Collect all data items below the header
+  const dataItems = [];
+  for (let i = headerRowIdx + 1; i < rows.length; i++) {
+    for (const cell of rows[i]) {
+      // Only include items that are below (lower y) the header
+      if (cell.y < headerMinY) dataItems.push(cell);
+    }
+  }
+
+  // Now we need to group data items into table rows
+  // Strategy: find all items near the LOT column x-position that look like lot numbers
+  // Then for each lot number, gather items on the same y-band
+  if (!columnPositions.lot) return { estateName: estateName || filenameToEstate(filename), lots: [] };
+
+  // Find all lot number candidates
+  const lotCandidates = dataItems.filter(item => {
+    const nearLotCol = Math.abs(item.x - columnPositions.lot) <= 25;
+    const isNumeric = /^\d{2,5}$/.test(item.text.trim());
+    return nearLotCol && isNumeric;
+  });
+
+  // For each lot number, gather all items within ±12 y-pixels (same visual row)
+  const DATA_ROW_BAND = 12;
+  lotCandidates.forEach(lotItem => {
+    const lotY = lotItem.y;
+    const rowItems = dataItems.filter(item =>
+      Math.abs(item.y - lotY) <= DATA_ROW_BAND
+    ).sort((a, b) => a.x - b.x);
+
+    // Skip non-data rows
+    const rowText = rowItems.map(c => c.text).join(' ');
+    if (/disclaimer|whilst|contact|information|fencing|include|deposit|design guide|pricing|all lots|for more|please|sales agent/i.test(rowText)) return;
+    if (/^bal\s*=|^\*estimated|^estimate title/i.test(rowText)) return;
+
+    // Extract values using column positions
+    const sizeText = findColumnValue(rowItems, columnPositions.size, 25);
+    const frontText = findColumnValue(rowItems, columnPositions.front, 35);
+    const priceText = findColumnValues(rowItems, columnPositions.price, 30); // concat for split prices
+    const titlesText = findColumnValue(rowItems, columnPositions.titles, 30);
+
+    const lotNum = lotItem.text.trim();
+    const priceNum = parsePrice(priceText);
+    const sizeNum = parseFloat(sizeText.replace(/[^\d.]/g, '')) || 0;
+    const frontNum = parseFrontage(frontText);
+
+    if (lotNum && priceNum > 50000 && sizeNum > 50) {
+      results.push({
+        lot: lotNum,
+        size: sizeNum,
+        frontage: frontNum,
+        price: priceNum,
+        titles: titlesText.replace(/^\*+/, '').trim() || '',
+      });
+    }
+  });
+
+  // Deduplicate (same lot number)
+  const seen = new Set();
+  const deduped = results.filter(r => {
+    if (seen.has(r.lot)) return false;
+    seen.add(r.lot);
+    return true;
+  });
+
+  return { estateName: estateName || filenameToEstate(filename), lots: deduped };
+}
+
+// Find the single closest cell value to a column x-position
+function findColumnValue(cells, targetX, tolerance) {
+  if (targetX === undefined) return '';
+  tolerance = tolerance || 30;
+  let best = null;
+  let bestDist = Infinity;
+  cells.forEach(c => {
+    const dist = Math.abs(c.x - targetX);
+    if (dist < bestDist && dist <= tolerance) {
+      bestDist = dist;
+      best = c.text;
+    }
+  });
+  return best || '';
+}
+
+// Find ALL cells near a column x-position and concatenate (for split values like "$39" "9" ",000")
+function findColumnValues(cells, targetX, tolerance) {
+  if (targetX === undefined) return '';
+  tolerance = tolerance || 30;
+  const nearby = cells.filter(c => Math.abs(c.x - targetX) <= tolerance);
+  if (nearby.length === 0) return '';
+  return nearby.sort((a, b) => a.x - b.x).map(c => c.text).join('');
+}
+
+function parsePrice(str) {
+  // Remove spaces, join fragments, extract number
+  const cleaned = str.replace(/\s/g, '').replace(/,/g, '');
+  const match = cleaned.match(/\$?(\d+)/);
+  return match ? parseInt(match[1]) : 0;
+}
+
+function parseFrontage(str) {
+  // Handle formats: "12.5", "12/4.25", "12.5 x 30", "15 x 30", "11.99 / 4.25 x 30"
+  const cleaned = str.replace(/m$/i, '').trim();
+  if (!cleaned) return 0;
+  // Take just the first number from any format
+  const firstNum = cleaned.match(/^([\d.]+)/);
+  return firstNum ? parseFloat(firstNum[1]) : 0;
+}
+
+function filenameToEstate(filename) {
+  return filename.replace(/\.pdf$/i, '').replace(/example\s*land\s*pricelist\s*\d*/i, '').replace(/price\s*list/i, '').trim() || 'Unknown Estate';
+}
+
+// ============================================================
+// UI: DROP ZONE & PDF UPLOAD
+// ============================================================
+const dropZone = document.getElementById('dropZone');
+const pdfInput = document.getElementById('pdfInput');
+
+dropZone.addEventListener('click', () => pdfInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  handleFiles(e.dataTransfer.files);
+});
+pdfInput.addEventListener('change', e => handleFiles(e.target.files));
+
+async function handleFiles(files) {
+  for (const file of files) {
+    if (file.type !== 'application/pdf') continue;
+    dropZone.innerHTML = '<p>Parsing PDF...</p>';
+    try {
+      const result = await parseLandPDF(file);
+      if (result.lots.length === 0) {
+        showToast('No lot data found in PDF. Try manual entry.');
+        resetDropZone();
+        return;
+      }
+      parsedLots = result.lots;
+      document.getElementById('parseEstateName').value = result.estateName;
+      showParseModal();
+    } catch (err) {
+      console.error(err);
+      showToast('Error parsing PDF: ' + err.message);
+    }
+    resetDropZone();
+  }
+}
+
+function resetDropZone() {
+  dropZone.innerHTML = '<input type="file" id="pdfInput" accept=".pdf" multiple><p><strong>Drop land pricelist PDFs here</strong><br>or click to browse</p>';
+  const newInput = document.getElementById('pdfInput');
+  newInput.addEventListener('change', e => handleFiles(e.target.files));
+  dropZone.addEventListener('click', () => newInput.click());
+}
+
+// ============================================================
+// UI: PARSE MODAL
+// ============================================================
+function showParseModal() {
+  const tbody = document.getElementById('parseBody');
+  tbody.innerHTML = '';
+  parsedLots.forEach((lot, idx) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td contenteditable="true" data-field="lot" data-idx="${idx}">${lot.lot}</td>
+      <td contenteditable="true" data-field="size" data-idx="${idx}">${lot.size}</td>
+      <td contenteditable="true" data-field="frontage" data-idx="${idx}">${lot.frontage}</td>
+      <td contenteditable="true" data-field="price" data-idx="${idx}">$${lot.price.toLocaleString()}</td>
+      <td contenteditable="true" data-field="titles" data-idx="${idx}">${lot.titles}</td>
+      <td><button class="btn btn-xs btn-danger" onclick="removeParseRow(${idx})">×</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  document.getElementById('parseModal').classList.add('show');
+}
+
+function closeParseModal() {
+  document.getElementById('parseModal').classList.remove('show');
+}
+
+function removeParseRow(idx) {
+  parsedLots.splice(idx, 1);
+  showParseModal();
+}
+
+function confirmParsedLots() {
+  const estateName = document.getElementById('parseEstateName').value.trim() || 'Unknown Estate';
+
+  // Read edited values from table
+  const cells = document.querySelectorAll('#parseBody td[contenteditable]');
+  cells.forEach(cell => {
+    const idx = parseInt(cell.dataset.idx);
+    const field = cell.dataset.field;
+    if (!parsedLots[idx]) return;
+    const val = cell.textContent.trim();
+    if (field === 'price') parsedLots[idx].price = parsePrice(val);
+    else if (field === 'size') parsedLots[idx].size = parseFloat(val) || 0;
+    else if (field === 'frontage') parsedLots[idx].frontage = parseFloat(val) || 0;
+    else if (field === 'lot') parsedLots[idx].lot = val;
+    else if (field === 'titles') parsedLots[idx].titles = val;
+  });
+
+  // Add to main lots array
+  parsedLots.forEach(pl => {
+    lots.push({
+      id: nextLotId++,
+      estate: estateName,
+      lot: pl.lot,
+      size: pl.size,
+      frontage: pl.frontage,
+      price: pl.price,
+      titles: pl.titles,
+    });
+  });
+
+  closeParseModal();
+  updateEstateFilter();
+  renderLots();
+  showToast(`Imported ${parsedLots.length} lots from ${estateName}`);
+  parsedLots = [];
+}
+
+// ============================================================
+// UI: LOTS TABLE
+// ============================================================
+function renderLots() {
+  const tbody = document.getElementById('lotsBody');
+  const filtered = getFilteredLots();
+
+  document.getElementById('lotCount').textContent = `${filtered.length} lot${filtered.length !== 1 ? 's' : ''}`;
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><p>${lots.length === 0 ? 'Upload a land pricelist PDF to get started' : 'No lots match current filters'}</p></div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(lot => `
+    <tr class="lot-row ${selectedLotId === lot.id ? 'selected' : ''}" onclick="selectLot(${lot.id})">
+      <td>${lot.estate}</td>
+      <td>${lot.lot}</td>
+      <td>${lot.size}m²</td>
+      <td>${lot.frontage}m</td>
+      <td class="price">$${lot.price.toLocaleString()}</td>
+      <td>${lot.titles}</td>
+      <td class="actions"><button class="btn btn-xs btn-danger" onclick="event.stopPropagation();removeLot(${lot.id})">×</button></td>
+    </tr>
+  `).join('');
+}
+
+function getFilteredLots() {
+  const budget = parseFloat(document.getElementById('filterBudget').value) || Infinity;
+  const estate = document.getElementById('filterEstate').value;
+  const frontage = document.getElementById('filterFrontage').value;
+
+  return lots.filter(lot => {
+    if (estate && lot.estate !== estate) return false;
+    if (frontage) {
+      const f = parseFloat(frontage);
+      if (f === 15) { if (lot.frontage < 15) return false; }
+      else { if (Math.abs(lot.frontage - f) > 1.5) return false; }
+    }
+    if (budget < Infinity) {
+      // Check if any home design + min siteworks fits under budget
+      const minHome = Math.min(...EASYSTART_DESIGNS.map(d => d.essence));
+      if (lot.price + minHome + 17650 > budget) return false;
+    }
+    return true;
+  });
+}
+
+function selectLot(id) {
+  selectedLotId = id;
+  renderLots();
+  showBuilder();
+}
+
+function removeLot(id) {
+  lots = lots.filter(l => l.id !== id);
+  if (selectedLotId === id) { selectedLotId = null; hideBuilder(); }
+  updateEstateFilter();
+  renderLots();
+}
+
+function clearAllLots() {
+  lots = [];
+  selectedLotId = null;
+  hideBuilder();
+  updateEstateFilter();
+  renderLots();
+}
+
+function updateEstateFilter() {
+  const select = document.getElementById('filterEstate');
+  const estates = [...new Set(lots.map(l => l.estate))].sort();
+  const current = select.value;
+  select.innerHTML = '<option value="">All</option>' + estates.map(e => `<option value="${e}">${e}</option>`).join('');
+  if (estates.includes(current)) select.value = current;
+}
+
+// Filter listeners
+document.getElementById('filterBudget').addEventListener('input', renderLots);
+document.getElementById('filterEstate').addEventListener('change', renderLots);
+document.getElementById('filterFrontage').addEventListener('change', renderLots);
+
+// ============================================================
+// UI: PACKAGE BUILDER
+// ============================================================
+function showBuilder() {
+  const lot = lots.find(l => l.id === selectedLotId);
+  if (!lot) return;
+
+  document.getElementById('builderEmpty').style.display = 'none';
+  document.getElementById('builderForm').style.display = 'block';
+
+  // Lot info
+  document.getElementById('selectedLotInfo').innerHTML = `
+    <strong>${lot.estate}</strong> — Lot ${lot.lot} | ${lot.size}m² | ${lot.frontage}m frontage | <strong>$${lot.price.toLocaleString()}</strong> | Titles: ${lot.titles}
+  `;
+
+  // Populate design dropdown
+  populateDesignDropdown();
+  updateTotals();
+}
+
+function hideBuilder() {
+  document.getElementById('builderEmpty').style.display = 'block';
+  document.getElementById('builderForm').style.display = 'none';
+}
+
+function populateDesignDropdown() {
+  const select = document.getElementById('designSelect');
+  select.innerHTML = '<option value="">— Select a home design —</option>';
+
+  // Group by frontage
+  const groups = {};
+  EASYSTART_DESIGNS.forEach((d, idx) => {
+    const key = `${d.frontage}m ${d.category}`;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push({ ...d, idx });
+  });
+
+  // Sort groups by frontage
+  const sortedKeys = Object.keys(groups).sort((a, b) => {
+    const fa = parseFloat(a);
+    const fb = parseFloat(b);
+    return fa - fb;
+  });
+
+  sortedKeys.forEach(key => {
+    const optgroup = document.createElement('optgroup');
+    optgroup.label = key;
+    groups[key].forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = d.idx;
+      opt.textContent = `${d.name} — ${d.notes} — E:$${(d.essence/1000).toFixed(1)}k / A:$${(d.aspire/1000).toFixed(1)}k`;
+      optgroup.appendChild(opt);
+    });
+    select.appendChild(optgroup);
+  });
+}
+
+document.getElementById('designSelect').addEventListener('change', function() {
+  const idx = this.value;
+  if (idx !== '') {
+    const d = EASYSTART_DESIGNS[idx];
+    document.getElementById('designInfo').style.display = 'block';
+    document.getElementById('designNotes').textContent = `${d.notes} | ${d.area}m² | ${d.length}m long × ${d.width}m wide | ${d.category} loaded`;
+  } else {
+    document.getElementById('designInfo').style.display = 'none';
+  }
+  updateTotals();
+});
+
+document.getElementById('siteworksSelect').addEventListener('change', updateTotals);
+
+function updateTotals() {
+  const lot = lots.find(l => l.id === selectedLotId);
+  const designIdx = document.getElementById('designSelect').value;
+  const siteworks = parseInt(document.getElementById('siteworksSelect').value);
+
+  document.getElementById('totalLand').textContent = lot ? `$${lot.price.toLocaleString()}` : '—';
+  document.getElementById('totalSiteworks').textContent = `$${siteworks.toLocaleString()}`;
+
+  if (!lot || designIdx === '') {
+    document.getElementById('totalHomeEssence').textContent = '—';
+    document.getElementById('totalHomeAspire').textContent = '—';
+    document.getElementById('grandTotalEssence').textContent = '—';
+    document.getElementById('grandTotalAspire').textContent = '—';
+    document.getElementById('addShortlistBtn').disabled = true;
+    return;
+  }
+
+  const design = EASYSTART_DESIGNS[designIdx];
+  const essenceTotal = lot.price + design.essence + siteworks;
+  const aspireTotal = lot.price + design.aspire + siteworks;
+
+  document.getElementById('totalHomeEssence').textContent = `$${design.essence.toLocaleString()}`;
+  document.getElementById('totalHomeAspire').textContent = `$${design.aspire.toLocaleString()}`;
+  document.getElementById('grandTotalEssence').textContent = `$${essenceTotal.toLocaleString()}`;
+  document.getElementById('grandTotalAspire').textContent = `$${aspireTotal.toLocaleString()}`;
+  document.getElementById('addShortlistBtn').disabled = false;
+}
+
+// ============================================================
+// SHORTLIST
+// ============================================================
+function addToShortlist() {
+  const lot = lots.find(l => l.id === selectedLotId);
+  const designIdx = parseInt(document.getElementById('designSelect').value);
+  const siteworks = parseInt(document.getElementById('siteworksSelect').value);
+  const design = EASYSTART_DESIGNS[designIdx];
+
+  if (!lot || !design) return;
+
+  const essenceTotal = lot.price + design.essence + siteworks;
+  const aspireTotal = lot.price + design.aspire + siteworks;
+
+  // Check if lot already in shortlist
+  let existing = shortlist.find(s => s.lotId === lot.id);
+  if (existing) {
+    // Check if same design already added
+    if (existing.designs.some(d => d.design.name === design.name)) {
+      showToast(`${design.name} already added to Lot ${lot.lot}`);
+      return;
+    }
+    existing.designs.push({ design: { ...design }, siteworks, essenceTotal, aspireTotal });
+  } else {
+    shortlist.push({
+      lotId: lot.id,
+      lot: { ...lot },
+      designs: [{ design: { ...design }, siteworks, essenceTotal, aspireTotal }]
+    });
+  }
+
+  renderShortlist();
+  renderEmailPreview();
+  showToast(`Added ${design.name} to Lot ${lot.lot}`);
+}
+
+function removeShortlistDesign(lotId, designName) {
+  const entry = shortlist.find(s => s.lotId === lotId);
+  if (!entry) return;
+  entry.designs = entry.designs.filter(d => d.design.name !== designName);
+  if (entry.designs.length === 0) {
+    shortlist = shortlist.filter(s => s.lotId !== lotId);
+  }
+  renderShortlist();
+  renderEmailPreview();
+}
+
+function clearShortlist() {
+  shortlist = [];
+  renderShortlist();
+  renderEmailPreview();
+}
+
+function renderShortlist() {
+  const count = shortlist.reduce((sum, s) => sum + s.designs.length, 0);
+  document.getElementById('shortlistCount').textContent = `${count} package${count !== 1 ? 's' : ''}`;
+
+  if (shortlist.length === 0) {
+    document.getElementById('shortlistEmpty').style.display = 'block';
+    document.getElementById('shortlistContent').style.display = 'none';
+    return;
+  }
+
+  document.getElementById('shortlistEmpty').style.display = 'none';
+  document.getElementById('shortlistContent').style.display = 'block';
+
+  const html = shortlist.map(s => `
+    <div class="shortlist-group">
+      <div class="shortlist-group-header">
+        <span>${s.lot.estate} — Lot ${s.lot.lot} | ${s.lot.size}m² | ${s.lot.frontage}m | $${s.lot.price.toLocaleString()} | ${s.lot.titles}</span>
+      </div>
+      <div class="shortlist-designs">
+        ${s.designs.map(d => `
+          <div class="shortlist-design-row">
+            <span>${d.design.name} (${d.design.notes})</span>
+            <span>
+              <span class="badge badge-green">E: $${d.essenceTotal.toLocaleString()}</span>
+              <span class="badge" style="background:#fef3c7;color:#92400e;">A: $${d.aspireTotal.toLocaleString()}</span>
+              <button class="btn btn-xs btn-danger" onclick="removeShortlistDesign(${s.lotId}, '${d.design.name}')" style="margin-left:4px;">×</button>
+            </span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+
+  document.getElementById('shortlistContent').innerHTML = html;
+}
+
+// ============================================================
+// EMAIL OUTPUT
+// ============================================================
+function formatTitlesDate(titles) {
+  // Normalize titles date format to "Mon YYYY" (e.g., "Sep 2026")
+  if (!titles) return '';
+  let t = titles.trim();
+
+  // Handle "JUNE 2026*" -> "Jun 2026"
+  // Handle "Sep 26" -> "Sep 2026"
+  // Handle "September 2026" -> "Sep 2026"
+
+  const months = {
+    'january': 'Jan', 'february': 'Feb', 'march': 'Mar', 'april': 'Apr',
+    'may': 'May', 'june': 'Jun', 'july': 'Jul', 'august': 'Aug',
+    'september': 'Sep', 'october': 'Oct', 'november': 'Nov', 'december': 'Dec',
+    'jan': 'Jan', 'feb': 'Feb', 'mar': 'Mar', 'apr': 'Apr',
+    'jun': 'Jun', 'jul': 'Jul', 'aug': 'Aug', 'sep': 'Sep', 'oct': 'Oct', 'nov': 'Nov', 'dec': 'Dec'
+  };
+
+  // Remove asterisks
+  t = t.replace(/\*/g, '').trim();
+
+  // Try to match "Month Year" or "Month YY" patterns
+  const match = t.match(/^([a-zA-Z]+)\s*['"]?(\d{2,4})$/i);
+  if (match) {
+    const monthKey = match[1].toLowerCase();
+    let year = match[2];
+
+    // Convert 2-digit year to 4-digit
+    if (year.length === 2) {
+      year = '20' + year;
+    }
+
+    const monthAbbr = months[monthKey] || match[1].charAt(0).toUpperCase() + match[1].slice(1, 3).toLowerCase();
+    return monthAbbr + ' ' + year;
+  }
+
+  return t; // Return cleaned version if can't parse
+}
+
+function renderEmailPreview() {
+  const container = document.getElementById('emailPreview');
+  if (shortlist.length === 0) {
+    container.innerHTML = '<div class="empty-state"><p>Add packages to shortlist first</p></div>';
+    return;
+  }
+
+  const rows = shortlist.map(s => {
+    const lot = s.lot;
+    // Determine dimensions string from frontage + size
+    const depth = lot.size > 0 && lot.frontage > 0 ? Math.round(lot.size / lot.frontage * 10) / 10 : '';
+    const dims = lot.frontage && depth ? `${lot.frontage}m x ${depth}m` : `${lot.frontage}m front`;
+
+    const essenceDesigns = s.designs.map(d => `${d.design.name} $${d.essenceTotal.toLocaleString()}`).join('<br>');
+    const aspireDesigns = s.designs.map(d => `${d.design.name} $${d.aspireTotal.toLocaleString()}`).join('<br>');
+
+    const formattedTitles = formatTitlesDate(lot.titles);
+
+    return `<tr>
+      <td style="border:1px solid #8ea9db;padding:6px 10px;background-color:#ffffff;font-family:Calibri,Arial,sans-serif;font-size:12px;">${lot.estate}</td>
+      <td style="border:1px solid #8ea9db;padding:6px 10px;background-color:#ffffff;text-align:center;font-family:Calibri,Arial,sans-serif;font-size:12px;">${lot.lot}</td>
+      <td style="border:1px solid #8ea9db;padding:6px 10px;background-color:#ffffff;text-align:center;font-family:Calibri,Arial,sans-serif;font-size:12px;">${lot.size}m2</td>
+      <td style="border:1px solid #8ea9db;padding:6px 10px;background-color:#ffffff;text-align:center;font-family:Calibri,Arial,sans-serif;font-size:12px;">${dims}</td>
+      <td style="border:1px solid #8ea9db;padding:6px 10px;background-color:#ffffff;text-align:right;font-family:Calibri,Arial,sans-serif;font-size:12px;">$${lot.price.toLocaleString()}</td>
+      <td style="border:1px solid #8ea9db;padding:6px 10px;background-color:#ffffff;text-align:center;font-family:Calibri,Arial,sans-serif;font-size:12px;">${formattedTitles}</td>
+      <td style="border:1px solid #8ea9db;padding:6px 10px;background-color:#e2efda;font-family:Calibri,Arial,sans-serif;font-size:12px;">${essenceDesigns}</td>
+      <td style="border:1px solid #8ea9db;padding:6px 10px;background-color:#fce4d6;font-family:Calibri,Arial,sans-serif;font-size:12px;">${aspireDesigns}</td>
+    </tr>`;
+  }).join('');
+
+  container.innerHTML = `
+    <table border="1" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:12px;width:100%;border:2px solid #000000;">
+      <thead>
+        <tr>
+          <th style="border-top:2px solid #000000;border-bottom:2px solid #000000;border-left:2px solid #000000;border-right:2px solid #000000;padding:8px 10px;background-color:#d9e2f3;color:#000000;font-weight:bold;font-family:Calibri,Arial,sans-serif;font-size:11px;">ESTATE</th>
+          <th style="border-top:2px solid #000000;border-bottom:2px solid #000000;border-right:2px solid #000000;padding:8px 10px;background-color:#d9e2f3;color:#000000;font-weight:bold;font-family:Calibri,Arial,sans-serif;font-size:11px;">LOT</th>
+          <th style="border-top:2px solid #000000;border-bottom:2px solid #000000;border-right:2px solid #000000;padding:8px 10px;background-color:#d9e2f3;color:#000000;font-weight:bold;font-family:Calibri,Arial,sans-serif;font-size:11px;">SIZE</th>
+          <th style="border-top:2px solid #000000;border-bottom:2px solid #000000;border-right:2px solid #000000;padding:8px 10px;background-color:#d9e2f3;color:#000000;font-weight:bold;font-family:Calibri,Arial,sans-serif;font-size:11px;">DIMENSIONS</th>
+          <th style="border-top:2px solid #000000;border-bottom:2px solid #000000;border-right:2px solid #000000;padding:8px 10px;background-color:#d9e2f3;color:#000000;font-weight:bold;font-family:Calibri,Arial,sans-serif;font-size:11px;">LAND PRICE</th>
+          <th style="border-top:2px solid #000000;border-bottom:2px solid #000000;border-right:2px solid #000000;padding:8px 10px;background-color:#d9e2f3;color:#000000;font-weight:bold;font-family:Calibri,Arial,sans-serif;font-size:11px;">LAND TITLES</th>
+          <th style="border-top:2px solid #000000;border-bottom:2px solid #000000;border-right:2px solid #000000;padding:8px 10px;background-color:#c6e0b4;color:#000000;font-weight:bold;font-family:Calibri,Arial,sans-serif;font-size:11px;">TOTAL PACKAGE<br><span style="color:#2563eb;font-weight:bold;">ESSENCE RANGE</span></th>
+          <th style="border-top:2px solid #000000;border-bottom:2px solid #000000;border-right:2px solid #000000;padding:8px 10px;background-color:#f8cbad;color:#000000;font-weight:bold;font-family:Calibri,Arial,sans-serif;font-size:11px;">TOTAL PACKAGE<br><span style="color:#2563eb;font-weight:bold;">ASPIRE RANGE</span></th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+function getEmailHTML() {
+  const header = document.getElementById('emailHeader').value.trim();
+  const tableHTML = document.getElementById('emailPreview').innerHTML;
+
+  let bodyContent = '';
+  if (header) {
+    const paragraphs = header.split('\n').filter(p => p.trim()).map(p =>
+      `<p style="font-family:Calibri,Arial,sans-serif;font-size:12px;color:#1e293b;margin:0 0 10px 0;">${p}</p>`
+    ).join('');
+    bodyContent += paragraphs + '<br>';
+  }
+  bodyContent += tableHTML;
+
+  // Wrap in full HTML document for better Outlook compatibility
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!--[if mso]>
+<style type="text/css">
+table {border-collapse:collapse;}
+td, th {padding:6px 10px;}
+</style>
+<![endif]-->
+</head>
+<body style="font-family:Calibri,Arial,sans-serif;font-size:12px;margin:0;padding:0;">
+${bodyContent}
+</body>
+</html>`;
+}
+
+async function copyToClipboard() {
+  if (shortlist.length === 0) {
+    showToast('Nothing to copy — add packages first');
+    return;
+  }
+
+  const html = getEmailHTML();
+  const plainText = shortlist.map(s => {
+    const lot = s.lot;
+    const designs = s.designs.map(d => `${d.design.name}: E $${d.essenceTotal.toLocaleString()} / A $${d.aspireTotal.toLocaleString()}`).join(', ');
+    return `${lot.estate} Lot ${lot.lot} | ${lot.size}m² | $${lot.price.toLocaleString()} | ${designs}`;
+  }).join('\n');
+
+  try {
+    // Try the modern Clipboard API first
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        'text/html': new Blob([html], { type: 'text/html' }),
+        'text/plain': new Blob([plainText], { type: 'text/plain' }),
+      })
+    ]);
+    showToast('Copied to clipboard — paste into your email');
+  } catch (err) {
+    // Fallback using execCommand with a hidden div for HTML
+    try {
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = html;
+      tempDiv.style.position = 'fixed';
+      tempDiv.style.left = '-9999px';
+      tempDiv.style.top = '0';
+      tempDiv.contentEditable = 'true';
+      document.body.appendChild(tempDiv);
+
+      const range = document.createRange();
+      range.selectNodeContents(tempDiv);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+
+      document.execCommand('copy');
+      document.body.removeChild(tempDiv);
+      selection.removeAllRanges();
+
+      showToast('Copied to clipboard — paste into your email');
+    } catch (fallbackErr) {
+      // Final fallback - plain text only
+      const textarea = document.createElement('textarea');
+      textarea.value = plainText;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      showToast('Copied as plain text (rich copy not supported in this browser)');
+    }
+  }
+}
+
+// ============================================================
+// TABS
+// ============================================================
+function switchTab(tab, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tabShortlist').style.display = tab === 'shortlist' ? 'block' : 'none';
+  document.getElementById('tabPreview').style.display = tab === 'preview' ? 'block' : 'none';
+  if (tab === 'preview') renderEmailPreview();
+}
+
+// ============================================================
+// UPDATE HOME PRICES
+// ============================================================
+function showUpdateHomePrices() {
+  document.getElementById('homePriceModal').classList.add('show');
+  document.getElementById('homePriceStatus').textContent = '';
+}
+
+function closeHomePriceModal() {
+  document.getElementById('homePriceModal').classList.remove('show');
+}
+
+const homeDropZone = document.getElementById('homeDropZone');
+const homePdfInput = document.getElementById('homePdfInput');
+
+homeDropZone.addEventListener('click', () => homePdfInput.click());
+homeDropZone.addEventListener('dragover', e => { e.preventDefault(); homeDropZone.classList.add('dragover'); });
+homeDropZone.addEventListener('dragleave', () => homeDropZone.classList.remove('dragover'));
+homeDropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  homeDropZone.classList.remove('dragover');
+  handleHomePriceFile(e.dataTransfer.files[0]);
+});
+homePdfInput.addEventListener('change', e => handleHomePriceFile(e.target.files[0]));
+
+async function handleHomePriceFile(file) {
+  if (!file || file.type !== 'application/pdf') return;
+  const status = document.getElementById('homePriceStatus');
+  status.textContent = 'Parsing Easystart price list...';
+
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let allItems = [];
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const items = content.items.map(item => ({
+        text: item.str.trim(),
+        x: Math.round(item.transform[4]),
+        y: Math.round(item.transform[5]),
+      })).filter(item => item.text.length > 0);
+
+      const rows = {};
+      items.forEach(item => {
+        const yKey = Math.round(item.y / 3) * 3;
+        if (!rows[yKey]) rows[yKey] = [];
+        rows[yKey].push(item);
+      });
+
+      const sortedRows = Object.entries(rows)
+        .sort(([a], [b]) => Number(b) - Number(a))
+        .map(([, items]) => items.sort((a, b) => a.x - b.x));
+
+      allItems.push(...sortedRows);
+    }
+
+    // Find rows that look like home design data (start with a name, have $ prices)
+    let updated = 0;
+    allItems.forEach(row => {
+      const texts = row.map(c => c.text);
+      const rowStr = texts.join(' ');
+
+      // Look for design name as first cell, then prices
+      if (texts.length < 3) return;
+      const name = texts[0].replace(/^\*+\s*/, '').trim();
+      const design = EASYSTART_DESIGNS.find(d => d.name.toLowerCase() === name.toLowerCase());
+      if (!design) return;
+
+      // Find price-like values
+      const prices = texts.filter(t => /^\$[\d,]+$/.test(t.replace(/\s/g, ''))).map(t => parseInt(t.replace(/[$,\s]/g, '')));
+      if (prices.length >= 2) {
+        // Prices come as: Easy Spec, Essence, Aspire (we want Essence and Aspire)
+        if (prices.length >= 3) {
+          design.essence = prices[1];
+          design.aspire = prices[2];
+        } else {
+          design.essence = prices[0];
+          design.aspire = prices[1];
+        }
+        updated++;
+      }
+    });
+
+    status.textContent = `Updated ${updated} home design prices.`;
+    if (updated > 0) {
+      populateDesignDropdown();
+      updateTotals();
+      showToast(`Updated ${updated} Easystart prices`);
+    }
+  } catch (err) {
+    status.textContent = 'Error: ' + err.message;
+  }
+}
+
+// ============================================================
+// TOAST
+// ============================================================
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2500);
+}
+
+// ============================================================
+// INIT
+// ============================================================
+renderLots();
+renderShortlist();
+</script>
+</body>
+</html>

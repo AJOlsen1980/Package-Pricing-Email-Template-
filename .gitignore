@@ -1,0 +1,8 @@
+# PDF files (sample data)
+*.pdf
+
+# macOS
+.DS_Store
+
+# Claude project files
+.claude/
