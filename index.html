@@ -172,6 +172,9 @@ td[contenteditable]:focus { outline: 2px solid var(--primary); outline-offset: -
         <input type="file" id="pdfInput" accept=".pdf" multiple>
         <p><strong>Drop land pricelist PDFs here</strong><br>or click to browse</p>
       </div>
+      <div style="text-align:center;margin-bottom:12px;">
+        <button class="btn btn-sm" onclick="showManualLotModal()">+ Add Lot Manually</button>
+      </div>
 
       <div class="filters">
         <div class="filter-group">
@@ -261,6 +264,8 @@ td[contenteditable]:focus { outline: 2px solid var(--primary); outline-offset: -
             <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>Home (Essence):</span><span id="totalHomeEssence">—</span></div>
             <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>Home (Aspire):</span><span id="totalHomeAspire">—</span></div>
             <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>Siteworks:</span><span id="totalSiteworks">—</span></div>
+            <div id="loadingLineEssence" style="display:none;justify-content:space-between;padding:2px 0;"><span>Loading (Essence):</span><span id="totalLoadingEssence">—</span></div>
+            <div id="loadingLineAspire" style="display:none;justify-content:space-between;padding:2px 0;"><span>Loading (Aspire):</span><span id="totalLoadingAspire">—</span></div>
           </div>
           <div class="totals-grid">
             <div class="total-card essence">
@@ -270,6 +275,23 @@ td[contenteditable]:focus { outline: 2px solid var(--primary); outline-offset: -
             <div class="total-card aspire">
               <div class="label">Aspire Range</div>
               <div class="amount" id="grandTotalAspire">—</div>
+            </div>
+          </div>
+
+          <!-- Price Loading -->
+          <div id="priceLoadingSection" style="margin-top:10px;">
+            <button class="btn btn-sm" id="priceLoadingToggle" onclick="togglePriceLoading()" style="width:100%;justify-content:center;">+ Price Loading</button>
+            <div id="priceLoadingInputs" style="display:none; margin-top:8px;">
+              <div style="display:flex; gap:8px;">
+                <div style="flex:1;">
+                  <label style="font-size:11px; font-weight:600; color:var(--text-light); display:block; margin-bottom:4px;">Essence Loading</label>
+                  <input type="number" id="priceLoadingEssence" placeholder="$0" style="width:100%; padding:6px 10px; border:1px solid var(--border); border-radius:4px; font-size:13px;" oninput="updateTotals()">
+                </div>
+                <div style="flex:1;">
+                  <label style="font-size:11px; font-weight:600; color:var(--text-light); display:block; margin-bottom:4px;">Aspire Loading</label>
+                  <input type="number" id="priceLoadingAspire" placeholder="$0" style="width:100%; padding:6px 10px; border:1px solid var(--border); border-radius:4px; font-size:13px;" oninput="updateTotals()">
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -335,6 +357,42 @@ td[contenteditable]:focus { outline: 2px solid var(--primary); outline-offset: -
     <div class="modal-actions">
       <button class="btn" onclick="closeParseModal()">Cancel</button>
       <button class="btn btn-primary" onclick="confirmParsedLots()">Import Lots</button>
+    </div>
+  </div>
+</div>
+
+<!-- Manual lot entry modal -->
+<div class="modal-overlay" id="manualLotModal">
+  <div class="modal" style="max-width:500px;">
+    <h2>Add Lot Manually</h2>
+    <p style="font-size:13px;color:var(--text-light);margin-bottom:16px;">Enter lot details when no PDF pricelist is available.</p>
+    <div class="builder-row">
+      <label>Estate Name:</label>
+      <input type="text" id="manualEstate" placeholder="e.g. The Avenue, Brabham">
+    </div>
+    <div class="builder-row">
+      <label>Lot Number:</label>
+      <input type="text" id="manualLotNum" placeholder="e.g. 1234">
+    </div>
+    <div class="builder-row">
+      <label>Size (m²):</label>
+      <input type="number" id="manualSize" placeholder="e.g. 375" step="1">
+    </div>
+    <div class="builder-row">
+      <label>Frontage (m):</label>
+      <input type="number" id="manualFrontage" placeholder="e.g. 12.5" step="0.1">
+    </div>
+    <div class="builder-row">
+      <label>Price ($):</label>
+      <input type="number" id="manualPrice" placeholder="e.g. 250000" step="1000">
+    </div>
+    <div class="builder-row">
+      <label>Titles Date:</label>
+      <input type="text" id="manualTitles" placeholder="e.g. Jun 2026">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeManualLotModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="addManualLot()">Add Lot</button>
     </div>
   </div>
 </div>
@@ -939,13 +997,51 @@ document.getElementById('designSelect').addEventListener('change', function() {
 
 document.getElementById('siteworksSelect').addEventListener('change', updateTotals);
 
+function togglePriceLoading() {
+  const inputs = document.getElementById('priceLoadingInputs');
+  const btn = document.getElementById('priceLoadingToggle');
+  if (inputs.style.display === 'none') {
+    inputs.style.display = 'block';
+    btn.textContent = '− Price Loading';
+  } else {
+    inputs.style.display = 'none';
+    btn.textContent = '+ Price Loading';
+    document.getElementById('priceLoadingEssence').value = '';
+    document.getElementById('priceLoadingAspire').value = '';
+    updateTotals();
+  }
+}
+
+function getPriceLoading() {
+  const essence = parseInt(document.getElementById('priceLoadingEssence').value) || 0;
+  const aspire = parseInt(document.getElementById('priceLoadingAspire').value) || 0;
+  return { essence, aspire };
+}
+
 function updateTotals() {
   const lot = lots.find(l => l.id === selectedLotId);
   const designIdx = document.getElementById('designSelect').value;
   const siteworks = parseInt(document.getElementById('siteworksSelect').value);
+  const loading = getPriceLoading();
 
   document.getElementById('totalLand').textContent = lot ? `$${lot.price.toLocaleString()}` : '—';
   document.getElementById('totalSiteworks').textContent = `$${siteworks.toLocaleString()}`;
+
+  // Show/hide loading line items
+  const loadingLineE = document.getElementById('loadingLineEssence');
+  const loadingLineA = document.getElementById('loadingLineAspire');
+  if (loading.essence) {
+    loadingLineE.style.display = 'flex';
+    document.getElementById('totalLoadingEssence').textContent = `$${loading.essence.toLocaleString()}`;
+  } else {
+    loadingLineE.style.display = 'none';
+  }
+  if (loading.aspire) {
+    loadingLineA.style.display = 'flex';
+    document.getElementById('totalLoadingAspire').textContent = `$${loading.aspire.toLocaleString()}`;
+  } else {
+    loadingLineA.style.display = 'none';
+  }
 
   if (!lot || designIdx === '') {
     document.getElementById('totalHomeEssence').textContent = '—';
@@ -957,8 +1053,8 @@ function updateTotals() {
   }
 
   const design = EASYSTART_DESIGNS[designIdx];
-  const essenceTotal = lot.price + design.essence + siteworks;
-  const aspireTotal = lot.price + design.aspire + siteworks;
+  const essenceTotal = lot.price + design.essence + siteworks + loading.essence;
+  const aspireTotal = lot.price + design.aspire + siteworks + loading.aspire;
 
   document.getElementById('totalHomeEssence').textContent = `$${design.essence.toLocaleString()}`;
   document.getElementById('totalHomeAspire').textContent = `$${design.aspire.toLocaleString()}`;
@@ -975,11 +1071,12 @@ function addToShortlist() {
   const designIdx = parseInt(document.getElementById('designSelect').value);
   const siteworks = parseInt(document.getElementById('siteworksSelect').value);
   const design = EASYSTART_DESIGNS[designIdx];
+  const loading = getPriceLoading();
 
   if (!lot || !design) return;
 
-  const essenceTotal = lot.price + design.essence + siteworks;
-  const aspireTotal = lot.price + design.aspire + siteworks;
+  const essenceTotal = lot.price + design.essence + siteworks + loading.essence;
+  const aspireTotal = lot.price + design.aspire + siteworks + loading.aspire;
 
   // Check if lot already in shortlist
   let existing = shortlist.find(s => s.lotId === lot.id);
@@ -1244,6 +1341,56 @@ function switchTab(tab, el) {
   document.getElementById('tabShortlist').style.display = tab === 'shortlist' ? 'block' : 'none';
   document.getElementById('tabPreview').style.display = tab === 'preview' ? 'block' : 'none';
   if (tab === 'preview') renderEmailPreview();
+}
+
+// ============================================================
+// MANUAL LOT ENTRY
+// ============================================================
+function showManualLotModal() {
+  // Clear form
+  document.getElementById('manualEstate').value = '';
+  document.getElementById('manualLotNum').value = '';
+  document.getElementById('manualSize').value = '';
+  document.getElementById('manualFrontage').value = '';
+  document.getElementById('manualPrice').value = '';
+  document.getElementById('manualTitles').value = '';
+  document.getElementById('manualLotModal').classList.add('show');
+}
+
+function closeManualLotModal() {
+  document.getElementById('manualLotModal').classList.remove('show');
+}
+
+function addManualLot() {
+  const estate = document.getElementById('manualEstate').value.trim();
+  const lotNum = document.getElementById('manualLotNum').value.trim();
+  const size = parseFloat(document.getElementById('manualSize').value) || 0;
+  const frontage = parseFloat(document.getElementById('manualFrontage').value) || 0;
+  const price = parseInt(document.getElementById('manualPrice').value) || 0;
+  const titles = document.getElementById('manualTitles').value.trim();
+
+  // Validation
+  if (!estate) { showToast('Please enter an estate name'); return; }
+  if (!lotNum) { showToast('Please enter a lot number'); return; }
+  if (size <= 0) { showToast('Please enter a valid lot size'); return; }
+  if (frontage <= 0) { showToast('Please enter a valid frontage'); return; }
+  if (price <= 0) { showToast('Please enter a valid price'); return; }
+
+  // Add to lots array
+  lots.push({
+    id: nextLotId++,
+    estate: estate,
+    lot: lotNum,
+    size: size,
+    frontage: frontage,
+    price: price,
+    titles: titles,
+  });
+
+  closeManualLotModal();
+  updateEstateFilter();
+  renderLots();
+  showToast(`Added Lot ${lotNum} from ${estate}`);
 }
 
 // ============================================================
